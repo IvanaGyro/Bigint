@@ -22,7 +22,7 @@ extern struct Bigint {
 } bigint_default;
 typedef struct Bigint Bigint;
 
-int atobi(const char* in, bigint_chunk** out);
+Bigint* atobi(const char* s_in);
 char* bitoa(const bigint_chunk* num, int len);
 void add(char* a, const char* b);
 void mul(char* a, const char* b);

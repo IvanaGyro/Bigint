@@ -10,32 +10,37 @@ extern "C" {
 
 Bigint bigint_default = {NULL, 0, 0};
 
-int atobi(const char* in, bigint_chunk** out) {
-  int len = strlen(in);
+Bigint* atobi(const char* s_in) {
+  int len = strlen(s_in);
   char* buf = (char*)malloc(len + 1);
-  strcpy(buf, in);
+  strcpy(buf, s_in);
   char*s = buf;
   while (*s == '0') {
     ++s;
     --len;
   }
+  Bigint* num = (Bigint*)malloc(sizeof(Bigint));
+  *num = bigint_default;
   if (len == 0) {
-    *out = (bigint_chunk*)malloc(kBigintChunkSize);
-    (*out)[0] = 0;
-    return 1;
+    num->chunks = (bigint_chunk*)malloc(kBigintChunkSize);
+    num->chunks[0] = 0;
+    num->len = 1;
+    num->bits = 0;
+    return num;
   }
   
-  int chunk_len = (int)(len * kBigintLog2_10 / kBigintChunkBits + 1);
-  bigint_chunk* num = (bigint_chunk*)malloc(chunk_len * kBigintChunkSize);
-  memset(num, 0, chunk_len * kBigintChunkSize);
+  num->len = (int)(len * kBigintLog2_10 / kBigintChunkBits + 1);
+  num->chunks = (bigint_chunk*)malloc(num->len * kBigintChunkSize);
+  memset(num->chunks, 0, num->len * kBigintChunkSize);
 
   int tail = len - 1;
-  bigint_chunk* cur_chunk = num;
+  bigint_chunk* cur_chunk = num->chunks;
   bigint_chunk cur_mask = 1;
   char carry, tmp;
   int i, l, r;
 
   while (*s) {
+    ++num->bits;
     if (s[tail] & 1) { // '1' = 49, '3' = 51...
       *cur_chunk |= cur_mask;
     }
@@ -57,8 +62,7 @@ int atobi(const char* in, bigint_chunk** out) {
     }
   }
   free(buf);
-  *out = num;
-  return chunk_len;
+  return num;
 }
 
 char* bitoa(const bigint_chunk* num, int len) {
