@@ -1,24 +1,25 @@
-#include <iostream>
 #include "bigint.h"
-#include <string.h>
+#include "gtest/gtest.h"
 
+namespace {
 
-using namespace std;
-
-int main(int argc, char **argv)
-{
-  bigint_chunk* num;
-  int len;
-  
+TEST(atobi, HandleZeros) {
   Bigint* n;
-  
-  n = atobi("0");
-  printf("n.chunks: %p\nn.len: %p\nn.bits: %p\n", n->chunks, n->len, n->bits);
-  printf("%X\n", n->chunks[n->len-1]);
-  cout << bitoa(n->chunks, n->len) << endl;
-  
-  n = atobi("0571967239523523759103496341235627");
-  printf("n.chunks:%p\nn.len: %p\nn.bits: %p\n",n->chunks, n->len, n->bits);
-  printf("%llX\n", n->chunks[n->len-1]);
-  cout << bitoa(n->chunks, n->len) << endl;
+  const char* cases[5] = {
+    "0",
+    "00",
+    "0000000000000000000", // 2^63-1 = 9223372036854775807, 19 digits
+    "00000000000000000000",
+    "00000000000000000000000000000000000"
+  };
+  for (const char* s : cases) {
+    n = atobi(s);
+    EXPECT_EQ(n->chunks[0], 0);
+    EXPECT_EQ(n->len, 1);
+    EXPECT_EQ(n->bits, 0);
+    delete n->chunks;
+    delete n;
+  }
+}
+
 }
