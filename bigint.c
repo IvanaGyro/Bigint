@@ -8,6 +8,8 @@ extern "C" {
 
 #include "stdio.h"
 
+Bigint bigint_default = {NULL, 0, 0};
+
 int atobi(const char* in, bigint_chunk** out) {
   int len = strlen(in);
   char* buf = (char*)malloc(len + 1);
