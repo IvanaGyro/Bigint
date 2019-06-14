@@ -67,4 +67,31 @@ TEST(atobi, Boundary) {
   delete s;
 }
 
+TEST(bitoa, ReversedAtobi) {
+  const char* cases[12] = {
+    "0",
+    "1",
+    "3",
+    "65535",
+    "65536",
+    "2147483647",
+    "2147483648",
+    "140737488355327",
+    "140737488355328",
+    "9223372036854775807",
+    "9223372036854775808",
+    "194892184921349854213168441698561237986513354652189763634584888122150"
+  };
+  Bigint* n;
+  char* res;
+  for (const char* s : cases) {
+    n = atobi(s);
+    res = bitoa(n->chunks, n->len);
+    EXPECT_STREQ(res, s);
+    delete res;
+    delete n->chunks;
+    delete n;
+  }
+}
+
 }
