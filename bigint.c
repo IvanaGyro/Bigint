@@ -65,9 +65,9 @@ Bigint* atobi(const char* s_in) {
   return num;
 }
 
-char* bitoa(const bigint_chunk* num, int len) {
-  char* s = (char*)malloc(len * kBigintChunkBits * kBigintLog2 + 2);
-  memset(s, 0, len * kBigintChunkBits * kBigintLog2 + 2);
+char* bitoa(const Bigint* num) {
+  char* s = (char*)malloc(num->bits * kBigintLog2 + 2);
+  memset(s, 0, num->bits * kBigintLog2 + 2);
   char* buf = (char*)malloc(kBigintChunkBits * kBigintLog2 + 2);
   *s = '0';
   int i;
@@ -76,11 +76,11 @@ char* bitoa(const bigint_chunk* num, int len) {
   char tmp;
   bigint_chunk mask, upper_bound = kBigintMask >> 1;
   bigint_chunk multiplier = 1;
-  for (i=len-1; i >= 0; --i) {
+  for (i=num->len-1; i >= 0; --i) {
     mask = upper_bound;
     while (mask) {
       multiplier <<= 1;
-      if (num[i] & mask || multiplier == upper_bound) {
+      if (num->chunks[i] & mask || multiplier == upper_bound) {
         _i64toa(multiplier, buf, 10);
         r = buf + strlen(buf) - 1;
         l = buf;
@@ -91,7 +91,7 @@ char* bitoa(const bigint_chunk* num, int len) {
         }
         multiplier = 1;
         mul(s, buf);
-        if (num[i] & mask) add(s, "1");
+        if (num->chunks[i] & mask) add(s, "1");
       }
       mask >>= 1;
     }

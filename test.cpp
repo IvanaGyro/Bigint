@@ -86,7 +86,7 @@ TEST(bitoa, ReversedAtobi) {
   char* res;
   for (const char* s : cases) {
     n = atobi(s);
-    res = bitoa(n->chunks, n->len);
+    res = bitoa(n);
     EXPECT_STREQ(res, s);
     delete res;
     delete n->chunks;
