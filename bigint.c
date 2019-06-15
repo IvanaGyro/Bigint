@@ -36,6 +36,19 @@ inline void* bigint_realloc(void* memory, size_t new_size) {
     return memory;
 }
 
+Bigint* bigint_copy(Bigint* num) {
+  Bigint* copy = (Bigint*)bigint_malloc(sizeof(Bigint));
+  *copy = *num;
+  copy->chunks = (bigint_chunk*)bigint_malloc(copy->len * kBigintChunkSize);
+  memcpy(copy->chunks, num->chunks, copy->len * kBigintChunkSize);
+  return copy;
+}
+
+void bigint_destroy(Bigint* num) {
+  free(num->chunks);
+  free(num);
+}
+
 Bigint* atobi(const char* s_in) {
   int len = strlen(s_in);
   char* buf = (char*)bigint_malloc(len + 1);

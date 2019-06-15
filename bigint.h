@@ -20,6 +20,8 @@ extern struct Bigint {
 } bigint_default;
 typedef struct Bigint Bigint;
 
+Bigint* bigint_copy(Bigint* num);
+void bigint_destroy(Bigint* num);
 Bigint* atobi(const char* s_in);
 char* bitoa(const Bigint* num);
 void add(char* a, const char* b);
