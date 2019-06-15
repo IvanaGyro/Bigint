@@ -66,8 +66,14 @@ Bigint* atobi(const char* s_in) {
 }
 
 char* bitoa(const Bigint* num) {
-  char* s = (char*)malloc(num->bits * kBigintLog2 + 2);
-  memset(s, 0, num->bits * kBigintLog2 + 2);
+  // In mul(), we assume that the multiplication causes a carry, so here,
+  // we need one btye of extra memory.
+  // For example, "9" * "1" = "9", the len of the result is 1. However, in 
+  // mul(), due to the assumation that the maximum length of the result of
+  // multiplication of 1 digit by 1 digit is 2 digits, mul() needs 2 bytes
+  // to work correctly.
+  char* s = (char*)malloc((int)(num->bits * kBigintLog2 + 2 + 1));
+  memset(s, 0, num->bits * kBigintLog2 + 2 + 1);
   char* buf = (char*)malloc(kBigintChunkBits * kBigintLog2 + 2);
   *s = '0';
   int i;
