@@ -181,6 +181,38 @@ void add(char* a, const char* b) {
   }
 }
 
+void bigint_add_assign(Bigint* a, const Bigint* b) {
+  int bits = (a->bits > b->bits ? a->bits : b->bits) + 1;
+  int len = (bits + kBigintChunkBits - 1) / kBigintChunkBits;
+  if (a->len < len) {
+    a->chunks = (bigint_chunk*)realloc(a->chunks, len * kBigintChunkSize);
+    memset(a->chunks + a->len, 0, (len - a->len) * kBigintChunkSize);
+    a->len = len;
+  }
+
+  int b_used_len = (b->bits + kBigintChunkBits - 1) / kBigintChunkBits;
+  bigint_chunk carry = 0;
+  int i;
+  for (i = 0; i < b_used_len; ++i) {
+    a->chunks[i] += b->chunks[i] + carry;
+    carry = (kBigintMask & a->chunks[i]) == kBigintMask;
+    a->chunks[i] &= kBigintMask - 1;
+  }
+  while (carry) {
+    a->chunks[i] += carry;
+    carry = (kBigintMask & a->chunks[i]) == kBigintMask;
+    a->chunks[i] &= kBigintMask - 1;
+    ++i;
+  }
+  if (i) { // a and b are not both 0
+    int pos = (bits - 1) / kBigintChunkBits;
+    int off = (bits - 1) % kBigintChunkBits;
+    bigint_chunk mask = 1;
+    if (a->chunks[i-1] & mask << off) a->bits = bits;
+    else a->bits = bits-1;
+  }
+}
+
 #ifdef __cplusplus
 }
 #endif //__cplusplus

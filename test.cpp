@@ -94,4 +94,79 @@ TEST(bitoa, ReversedAtobi) {
   }
 }
 
+TEST(add_eq, AddWithZero) {
+  Bigint* a;
+  Bigint* b;
+  char* res;
+
+  a = atobi("0");
+  b = atobi("0");
+  bigint_add_assign(a, b);
+  res = bitoa(a);
+  EXPECT_STREQ(res, "0");
+  delete res, a, b;
+
+  a = atobi("0");
+  b = atobi("1");
+  bigint_add_assign(a, b);
+  res = bitoa(a);
+  EXPECT_STREQ(res, "1");
+  delete res, a, b;
+
+  a = atobi("1");
+  b = atobi("0");
+  bigint_add_assign(a, b);
+  res = bitoa(a);
+  EXPECT_STREQ(res, "1");
+  delete res, a, b;
+}
+
+TEST(add_eq, Positive) {
+  Bigint* a;
+  Bigint* b;
+  char* res;
+
+  a = atobi("12345");
+  b = atobi("12345");
+  bigint_add_assign(a, b);
+  res = bitoa(a);
+  EXPECT_STREQ(res, "24690");
+  delete res, a, b;
+
+  a = atobi("2147483647");
+  b = atobi("1");
+  bigint_add_assign(a, b);
+  res = bitoa(a);
+  EXPECT_STREQ(res, "2147483648");
+  delete res, a, b;
+
+  a = atobi("1");
+  b = atobi("2147483647");
+  bigint_add_assign(a, b);
+  res = bitoa(a);
+  EXPECT_STREQ(res, "2147483648");
+  delete res, a, b;
+
+  a = atobi("9223372036854775807");
+  b = atobi("1");
+  bigint_add_assign(a, b);
+  res = bitoa(a);
+  EXPECT_STREQ(res, "9223372036854775808");
+  delete res, a, b;
+
+  a = atobi("4895128432161897895613214984561232112688456198122111351");
+  b = atobi("9223372036854775808");
+  bigint_add_assign(a, b);
+  res = bitoa(a);
+  EXPECT_STREQ(res, "4895128432161897895613214984561232121911828234976887159");
+  delete res, a, b;
+
+  a = atobi("9223372036854775808");
+  b = atobi("4895128432161897895613214984561232112688456198122111351");
+  bigint_add_assign(a, b);
+  res = bitoa(a);
+  EXPECT_STREQ(res, "4895128432161897895613214984561232121911828234976887159");
+  delete res, a, b;
+}
+
 }
