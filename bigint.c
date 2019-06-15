@@ -38,17 +38,17 @@ inline void* bigint_realloc(void* memory, size_t new_size) {
 
 Bigint* atobi(const char* s_in) {
   int len = strlen(s_in);
-  char* buf = (char*)malloc(len + 1);
+  char* buf = (char*)bigint_malloc(len + 1);
   strcpy(buf, s_in);
   char*s = buf;
   while (*s == '0') {
     ++s;
     --len;
   }
-  Bigint* num = (Bigint*)malloc(sizeof(Bigint));
+  Bigint* num = (Bigint*)bigint_malloc(sizeof(Bigint));
   *num = bigint_default;
   if (len == 0) {
-    num->chunks = (bigint_chunk*)malloc(kBigintChunkSize);
+    num->chunks = (bigint_chunk*)bigint_malloc(kBigintChunkSize);
     num->chunks[0] = 0;
     num->len = 1;
     num->bits = 0;
@@ -56,8 +56,7 @@ Bigint* atobi(const char* s_in) {
   }
   
   num->len = (int)(len * kBigintLog2_10 / kBigintChunkBits + 1);
-  num->chunks = (bigint_chunk*)malloc(num->len * kBigintChunkSize);
-  memset(num->chunks, 0, num->len * kBigintChunkSize);
+  num->chunks = (bigint_chunk*)bigint_calloc(num->len, kBigintChunkSize);
 
   int tail = len - 1;
   bigint_chunk* cur_chunk = num->chunks;
@@ -98,9 +97,8 @@ char* bitoa(const Bigint* num) {
   // mul(), due to the assumation that the maximum length of the result of
   // multiplication of 1 digit by 1 digit is 2 digits, mul() needs 2 bytes
   // to work correctly.
-  char* s = (char*)malloc((int)(num->bits * kBigintLog2 + 2 + 1));
-  memset(s, 0, num->bits * kBigintLog2 + 2 + 1);
-  char* buf = (char*)malloc(kBigintChunkBits * kBigintLog2 + 2);
+  char* s = (char*)bigint_calloc(num->bits * kBigintLog2 + 2 + 1, 1);
+  char* buf = (char*)bigint_malloc(kBigintChunkBits * kBigintLog2 + 2);
   *s = '0';
   int i;
   char* l;
@@ -160,8 +158,8 @@ void mul(char* a, const char* b) {
     return;
   }
 
-  char* buf = (char*)malloc(al + bl + 1);
-  char* a_copy = (char*)malloc(al + 1);
+  char* buf = (char*)bigint_malloc(al + bl + 1);
+  char* a_copy = (char*)bigint_malloc(al + 1);
   strcpy(a_copy, a);
   int i, j, k;
   char carry = 0, na, nb;
@@ -211,7 +209,7 @@ void bigint_add_assign(Bigint* a, const Bigint* b) {
   int bits = (a->bits > b->bits ? a->bits : b->bits) + 1;
   int len = (bits + kBigintChunkBits - 1) / kBigintChunkBits;
   if (a->len < len) {
-    a->chunks = (bigint_chunk*)realloc(a->chunks, len * kBigintChunkSize);
+    a->chunks = (bigint_chunk*)bigint_realloc(a->chunks, len * kBigintChunkSize);
     memset(a->chunks + a->len, 0, (len - a->len) * kBigintChunkSize);
     a->len = len;
   }
