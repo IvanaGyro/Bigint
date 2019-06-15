@@ -4,9 +4,37 @@ extern "C" {
 
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 #include "bigint.h"
 
 Bigint bigint_default = {NULL, 0, 0};
+
+inline void* bigint_malloc(size_t size) {
+    void* memory = malloc(size);
+    if (!memory) {
+      perror("bigint_malloc");
+      exit(errno);
+    }
+    return memory;
+}
+
+inline void* bigint_calloc(size_t number, size_t size) {
+    void* memory = calloc(number, size);
+    if (!memory) {
+      perror("bigint_calloc");
+      exit(errno);
+    }
+    return memory;
+}
+
+inline void* bigint_realloc(void* memory, size_t new_size) {
+    memory = realloc(memory, new_size);
+    if (!memory) {
+      perror("bigint_realloc");
+      exit(errno);
+    }
+    return memory;
+}
 
 Bigint* atobi(const char* s_in) {
   int len = strlen(s_in);
