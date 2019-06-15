@@ -2,11 +2,9 @@
 extern "C" {
 #endif //__cplusplus
 
-#include "string.h"
-#include "stdlib.h"
+#include <string.h>
+#include <stdlib.h>
 #include "bigint.h"
-
-#include "stdio.h"
 
 Bigint bigint_default = {NULL, 0, 0};
 

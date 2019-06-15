@@ -5,8 +5,6 @@
 extern "C" {
 #endif //__cplusplus
 
-#include "math.h"
-
 typedef unsigned long long bigint_chunk;
 const int kBigintChunkSize = sizeof(bigint_chunk);
 const int kBigintByteBits = 8; // number of bits per byte
