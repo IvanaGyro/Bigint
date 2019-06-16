@@ -261,6 +261,126 @@ void bigint_add_assign(Bigint* a, const Bigint* b) {
   }
 }
 
+// The comments show the value of each constant when `bigint_chunk` is 8-bits
+// long.
+const int kHighMulCarryOffset = kBigintChunkBits>> 1; // 3
+const int kLowMulCarryOffset = kHighMulCarryOffset + 1; // 4
+const int kHalfOffset = kLowMulCarryOffset; // 4
+const bigint_chunk kHalfBitMask = (bigint_chunk)1 << kLowMulCarryOffset; // 0b 0001 0000
+const bigint_chunk kLowHalfMask = kHalfBitMask - 1; // 0b 0000 1111
+const bigint_chunk kHighHalfMask = ~kLowHalfMask; // 0b 1111 0000
+const bigint_chunk kHighMulMask = ~(kLowHalfMask >> 1); // 0b 1111 1000
+const bigint_chunk kLowMulMask = kHighHalfMask; // 0b 1111 0000
+
+size_t used_len(const Bigint* n) {
+  return (n->bits + kBigintChunkBits - 1) / kBigintChunkBits;
+}
+
+Bigint* split(const Bigint* n) {
+  Bigint* res = (Bigint*)bigint_malloc(sizeof(Bigint));
+  *res = *n;
+  int n_used_len = used_len(n);
+  res->len = n_used_len == 0 ? 1 : n_used_len << 1;
+  res->chunks = (bigint_chunk*)bigint_calloc(res->len, kBigintChunkSize);
+
+  bigint_chunk* p = res->chunks;
+  bigint_chunk cur = n->chunks[0];
+  int need = kHalfOffset,
+      remainder = kBigintChunkBits,
+      i = 0;
+  while (i < n_used_len) {
+    if (remainder >= need) {
+      *p++ |= (cur & ((bigint_chunk)1 << need) - 1) << kHalfOffset - need;
+      if (remainder == need) {
+        cur = n->chunks[++i];
+        remainder = kBigintChunkBits;
+      } else {
+        cur >>= need;
+        remainder -= need;
+      }
+      need = kHalfOffset;
+    } else {
+      *p |= cur << kHalfOffset - need;
+      need -= remainder;
+      cur = n->chunks[++i];
+      remainder = kBigintChunkBits;
+    }
+  }
+  if (res->chunks[res->len - 1] == 0 && res->len > 1) --res->len;
+  return res;
+}
+
+void combine(Bigint* n) {
+  int need = kBigintChunkBits,
+      remainder = kHalfOffset;
+  bigint_chunk* l = n->chunks;
+  bigint_chunk* r = n->chunks;
+  bigint_chunk* end = n->chunks + n->len;
+  bigint_chunk cur = *r;
+  *r = 0;
+  while (r < end) {
+    if (remainder >= need) {
+      *l++ |= (cur & ((bigint_chunk)1 << need) - 1) << kBigintChunkBits - need;
+      if (remainder == need) {
+        cur = *++r;
+        if (r < end) *r = 0;
+        remainder = kHalfOffset;
+      } else {
+        cur >>= need;
+        remainder -= need;
+      }
+      need = kBigintChunkBits;
+    } else {
+      *l |= cur << kBigintChunkBits - need;
+      need -= remainder;
+      cur = *++r;
+      if (r < end) *r = 0;
+      remainder = kHalfOffset;
+    }
+  }
+  int len = n->len;
+  while (n->chunks[len-1] == 0 && len > 1) --len;
+  n->bits = len * kBigintChunkBits;
+  bigint_chunk mask = (bigint_chunk)1 << kBigintChunkBits - 1;
+  bigint_chunk last = n->chunks[len-1];
+  while (mask && (mask & last) == 0) {
+    mask >>= 1;
+    --n->bits;
+  }
+}
+
+Bigint* bigint_mul_bigint_school(const Bigint* a, const Bigint* b) {
+  Bigint* a_split = split(a);
+  Bigint* b_split = split(b);
+  int a_len = a_split->len, b_len = b_split->len;
+  int len = a_len + b_len;
+  Bigint* res = (Bigint*)bigint_malloc(sizeof(Bigint));
+  res->len = len;
+  res->sign = a->sign * b->sign;
+  res->chunks = (bigint_chunk*)bigint_calloc(len, kBigintChunkSize);
+  bigint_chunk* buf = (bigint_chunk*)bigint_malloc(len * kBigintChunkSize);
+  bigint_chunk tmp, carry_mul = 0, carry_add = 0;
+  for (int i = 0; i < b_len; ++i) {
+    int j = 0;
+    for (j = 0; j < a_len; ++j) {
+      tmp = a_split->chunks[j] * b_split->chunks[i] + carry_mul;
+      carry_mul = (tmp & kHighHalfMask) >> kHalfOffset;
+      res->chunks[i + j] += (tmp & kLowHalfMask) + carry_add;
+      carry_add = (res->chunks[i + j] & kHighHalfMask) != 0;
+      res->chunks[i + j] &= kLowHalfMask;
+    }
+    carry_add += carry_mul;
+    while (carry_add) {
+      res->chunks[i + j] += carry_add;
+      carry_add = ((res->chunks[i + j] & kHighHalfMask) >> kHalfOffset) & kLowHalfMask;
+      res->chunks[i + j++] &= kLowHalfMask;
+    }
+    carry_add = carry_mul = 0;
+  }
+  combine(res);
+  return res;
+}
+
 #ifdef __cplusplus
 }
 #endif //__cplusplus

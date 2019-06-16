@@ -28,6 +28,7 @@ char* bitoa(const Bigint* num);
 void add(char* a, const char* b);
 void mul(char* a, const char* b);
 void bigint_add_assign(Bigint* a, const Bigint* b);
+Bigint* bigint_mul_bigint(const Bigint* a, const Bigint* b);
 
 
 #ifdef __cplusplus
