@@ -7,7 +7,7 @@ extern "C" {
 #include <errno.h>
 #include "bigint.h"
 
-Bigint bigint_default = {NULL, 0, 0};
+Bigint bigint_default = {NULL, 0, 0, 1};
 
 inline void* bigint_malloc(size_t size) {
     void* memory = malloc(size);
@@ -53,7 +53,13 @@ Bigint* atobi(const char* s_in) {
   int len = strlen(s_in);
   char* buf = (char*)bigint_malloc(len + 1);
   strcpy(buf, s_in);
+  int sign = 1;
   char*s = buf;
+  while (*s == '+' || *s == '-') {
+    sign = *s == '+' ? sign : -sign;
+    ++s;
+    --len;
+  }
   while (*s == '0') {
     ++s;
     --len;
@@ -70,6 +76,7 @@ Bigint* atobi(const char* s_in) {
   
   num->len = (int)(len * kBigintLog2_10 / kBigintChunkBits + 1);
   num->chunks = (bigint_chunk*)bigint_calloc(num->len, kBigintChunkSize);
+  num->sign = sign;
 
   int tail = len - 1;
   bigint_chunk* cur_chunk = num->chunks;
@@ -110,9 +117,13 @@ char* bitoa(const Bigint* num) {
   // mul(), due to the assumation that the maximum length of the result of
   // multiplication of 1 digit by 1 digit is 2 digits, mul() needs 2 bytes
   // to work correctly.
-  char* s = (char*)bigint_calloc(num->bits * kBigintLog2 + 2 + 1, 1);
-  char* buf = (char*)bigint_malloc(kBigintChunkBits * kBigintLog2 + 2);
+  int off = num->sign == 1 ? 0 : 1;
+  char* res = (char*)bigint_calloc(num->bits * kBigintLog2 + 2 + 1 + off, 1);
+  char* s = res;
+  if (num->sign == -1) *s++ = '-'; 
   *s = '0';
+  char* buf = (char*)bigint_malloc(kBigintChunkBits * kBigintLog2 + 2);
+  
   int i;
   char* l;
   char* r;
@@ -156,7 +167,7 @@ char* bitoa(const Bigint* num) {
     *r-- = *l;
     *l++ = tmp;
   }
-  return s;
+  return res;
 }
 
 void mul(char* a, const char* b) {

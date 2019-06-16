@@ -17,6 +17,7 @@ extern struct Bigint {
   bigint_chunk* chunks;
   int len;
   int bits;
+  int sign;
 } bigint_default;
 typedef struct Bigint Bigint;
 
