@@ -7,6 +7,18 @@ extern "C" {
 #include <errno.h>
 #include "bigint.h"
 
+typedef bigint_chunk chunk;
+const double kLog2_10 = 3.3219280948873621817;
+const double kLog2 = 0.30102999566398119802;
+
+// The comments show the value of each constant when `chunk` is 8-bits
+// long.
+const size_t kHalfOffset = (kBigintChunkBits>> 1) + 1; // 4
+const chunk kBitMask = (chunk)1 << kBigintChunkBits; // 0b 1000 0000
+const chunk kHalfBitMask = (chunk)1 << kHalfOffset; // 0b 0001 0000
+const chunk kLowHalfMask = kHalfBitMask - 1; // 0b 0000 1111
+const chunk kHighHalfMask = ~kLowHalfMask; // 0b 1111 0000
+
 Bigint bigint_default = {NULL, 0, 0, 0, 1};
 
 inline void* bigint_malloc(size_t size) {
@@ -39,8 +51,8 @@ inline void* bigint_realloc(void* memory, size_t new_size) {
 Bigint* bigint_copy(Bigint* num) {
   Bigint* copy = (Bigint*)bigint_malloc(sizeof(Bigint));
   *copy = *num;
-  copy->chunks = (bigint_chunk*)bigint_malloc(copy->capacity * kBigintChunkSize);
-  memcpy(copy->chunks, num->chunks, copy->capacity * kBigintChunkSize);
+  copy->chunks = (chunk*)bigint_malloc(copy->capacity * sizeof(chunk));
+  memcpy(copy->chunks, num->chunks, copy->capacity * sizeof(chunk));
   return copy;
 }
 
@@ -61,7 +73,7 @@ inline void trim_bits_by_one(Bigint* n, size_t chunk_bits) {
   size_t tmp = n->bits + chunk_bits - 1;
   size_t pos = tmp / chunk_bits - 1;
   size_t offset = tmp % chunk_bits;
-  bigint_chunk mask = 1;
+  chunk mask = 1;
   if ((n->chunks[pos] & mask << offset) == 0) --n->bits;
 }
 
@@ -83,7 +95,7 @@ Bigint* atobi(const char* s_in) {
   Bigint* num = (Bigint*)bigint_malloc(sizeof(Bigint));
   *num = bigint_default;
   if (len == 0) {
-    num->chunks = (bigint_chunk*)bigint_malloc(kBigintChunkSize);
+    num->chunks = (chunk*)bigint_malloc(sizeof(chunk));
     num->chunks[0] = 0;
     num->capacity = 1;
     num->size = 0;
@@ -91,13 +103,13 @@ Bigint* atobi(const char* s_in) {
     return num;
   }
   
-  num->capacity = (int)(len * kBigintLog2_10 / kBigintChunkBits + 1);
-  num->chunks = (bigint_chunk*)bigint_calloc(num->capacity, kBigintChunkSize);
+  num->capacity = (int)(len * kLog2_10 / kBigintChunkBits + 1);
+  num->chunks = (chunk*)bigint_calloc(num->capacity, sizeof(chunk));
   num->sign = sign;
 
   int tail = len - 1;
-  bigint_chunk* cur_chunk = num->chunks;
-  bigint_chunk cur_mask = 1;
+  chunk* cur_chunk = num->chunks;
+  chunk cur_mask = 1;
   char carry, tmp;
   int i, l, r;
 
@@ -118,7 +130,7 @@ Bigint* atobi(const char* s_in) {
     tail = l - 1;
     // shift mask
     cur_mask <<= 1;
-    if (cur_mask == kBigintMask) {
+    if (cur_mask == kBitMask) {
       cur_mask = 1;
       ++cur_chunk;
     }
@@ -128,64 +140,23 @@ Bigint* atobi(const char* s_in) {
   return num;
 }
 
-char* bitoa(const Bigint* num) {
-  // In mul(), we assume that the multiplication causes a carry, so here,
-  // we need one btye of extra memory.
-  // For example, "9" * "1" = "9", the len of the result is 1. However, in 
-  // mul(), due to the assumation that the maximum length of the result of
-  // multiplication of 1 digit by 1 digit is 2 digits, mul() needs 2 bytes
-  // to work correctly.
-  int off = num->sign == 1 ? 0 : 1;
-  char* res = (char*)bigint_calloc(num->bits * kBigintLog2 + 2 + 1 + off, 1);
-  char* s = res;
-  if (num->sign == -1) *s++ = '-'; 
-  *s = '0';
-  char* buf = (char*)bigint_malloc(kBigintChunkBits * kBigintLog2 + 2);
-  
-  int i;
-  char* l;
-  char* r;
-  char tmp;
-  bigint_chunk mask, upper_bound = kBigintMask >> 1;
-  bigint_chunk multiplier = 1;
-  for (i=num->size-1; i >= 0; --i) {
-    mask = upper_bound;
-    while (mask) {
-      multiplier <<= 1;
-      if (num->chunks[i] & mask || multiplier == upper_bound) {
-        _i64toa(multiplier, buf, 10);
-        r = buf + strlen(buf) - 1;
-        l = buf;
-        while (r > l) {
-          tmp = *r;
-          *r-- = *l;
-          *l++ = tmp;
-        }
-        multiplier = 1;
-        mul(s, buf);
-        if (num->chunks[i] & mask) add(s, "1");
-      }
-      mask >>= 1;
-    }
+void add(char* a, const char* b) {
+  char carry = 0, na, nb;
+  char* pa = a;
+  const char* pb = b;
+  while (*pb) {
+    na = *pa >= '0' ? *pa-'0' : 0;
+    nb = *pb++ - '0';
+    na += nb + carry;
+    carry = na / 10;
+    *pa++ = na % 10 + '0';
   }
-  _i64toa(multiplier, buf, 10);
-  r = buf + strlen(buf) - 1;
-  l = buf;
-  while (r > l) {
-    tmp = *r;
-    *r-- = *l;
-    *l++ = tmp;
+  while (carry) {
+    na = *pa >= '0' ? *pa-'0' : 0;
+    ++na;
+    carry = na / 10;
+    *pa++ = na % 10 + '0';
   }
-  mul(s, buf);
-  free(buf);
-  r = s + strlen(s) - 1;
-  l = s;
-  while (r > l) {
-    tmp = *r;
-    *r-- = *l;
-    *l++ = tmp;
-  }
-  return res;
 }
 
 void mul(char* a, const char* b) {
@@ -228,86 +199,108 @@ void mul(char* a, const char* b) {
   free(a_copy);
 }
 
-void add(char* a, const char* b) {
-  char carry = 0, na, nb;
-  char* pa = a;
-  const char* pb = b;
-  while (*pb) {
-    na = *pa >= '0' ? *pa-'0' : 0;
-    nb = *pb++ - '0';
-    na += nb + carry;
-    carry = na / 10;
-    *pa++ = na % 10 + '0';
+char* bitoa(const Bigint* num) {
+  // In mul(), we assume that the multiplication causes a carry, so here,
+  // we need one btye of extra memory.
+  // For example, "9" * "1" = "9", the len of the result is 1. However, in 
+  // mul(), due to the assumation that the maximum length of the result of
+  // multiplication of 1 digit by 1 digit is 2 digits, mul() needs 2 bytes
+  // to work correctly.
+  int off = num->sign == 1 ? 0 : 1;
+  char* res = (char*)bigint_calloc(num->bits * kLog2 + 2 + 1 + off, 1);
+  char* s = res;
+  if (num->sign == -1) *s++ = '-'; 
+  *s = '0';
+  char* buf = (char*)bigint_malloc(kBigintChunkBits * kLog2 + 2);
+  
+  int i;
+  char* l;
+  char* r;
+  char tmp;
+  chunk mask, upper_bound = kBitMask >> 1;
+  chunk multiplier = 1;
+  for (i=num->size-1; i >= 0; --i) {
+    mask = upper_bound;
+    while (mask) {
+      multiplier <<= 1;
+      if (num->chunks[i] & mask || multiplier == upper_bound) {
+        _i64toa(multiplier, buf, 10);
+        r = buf + strlen(buf) - 1;
+        l = buf;
+        while (r > l) {
+          tmp = *r;
+          *r-- = *l;
+          *l++ = tmp;
+        }
+        multiplier = 1;
+        mul(s, buf);
+        if (num->chunks[i] & mask) add(s, "1");
+      }
+      mask >>= 1;
+    }
   }
-  while (carry) {
-    na = *pa >= '0' ? *pa-'0' : 0;
-    ++na;
-    carry = na / 10;
-    *pa++ = na % 10 + '0';
+  _i64toa(multiplier, buf, 10);
+  r = buf + strlen(buf) - 1;
+  l = buf;
+  while (r > l) {
+    tmp = *r;
+    *r-- = *l;
+    *l++ = tmp;
   }
+  mul(s, buf);
+  free(buf);
+  r = s + strlen(s) - 1;
+  l = s;
+  while (r > l) {
+    tmp = *r;
+    *r-- = *l;
+    *l++ = tmp;
+  }
+  return res;
 }
 
 void bigint_add_assign(Bigint* a, const Bigint* b) {
   int bits = (a->bits > b->bits ? a->bits : b->bits) + 1;
   int len = (bits + kBigintChunkBits - 1) / kBigintChunkBits;
   if (a->capacity < len) {
-    a->chunks = (bigint_chunk*)bigint_realloc(a->chunks, len * kBigintChunkSize);
-    memset(a->chunks + a->capacity, 0, (len - a->capacity) * kBigintChunkSize);
+    a->chunks = (chunk*)bigint_realloc(a->chunks, len * sizeof(chunk));
+    memset(a->chunks + a->capacity, 0, (len - a->capacity) * sizeof(chunk));
     a->capacity = len;
   }
 
-  bigint_chunk carry = 0;
+  chunk carry = 0;
   int i;
   for (i = 0; i < b->size; ++i) {
     a->chunks[i] += b->chunks[i] + carry;
-    carry = (kBigintMask & a->chunks[i]) == kBigintMask;
-    a->chunks[i] &= kBigintMask - 1;
+    carry = (kBitMask & a->chunks[i]) == kBitMask;
+    a->chunks[i] &= kBitMask - 1;
   }
   while (carry) {
     a->chunks[i] += carry;
-    carry = (kBigintMask & a->chunks[i]) == kBigintMask;
-    a->chunks[i] &= kBigintMask - 1;
+    carry = (kBitMask & a->chunks[i]) == kBitMask;
+    a->chunks[i] &= kBitMask - 1;
     ++i;
   }
   a->bits = bits;
   trim_bits_by_one(a, kBigintChunkBits);
   update_size(a, kBigintChunkBits);
-  // if (i) { // a and b are not both 0
-  //   int pos = (bits - 1) / kBigintChunkBits;
-  //   int off = (bits - 1) % kBigintChunkBits;
-  //   bigint_chunk mask = 1;
-  //   if (a->chunks[i-1] & mask << off) a->bits = bits;
-  //   else a->bits = bits-1;
-    
-  // }
 }
-
-// The comments show the value of each constant when `bigint_chunk` is 8-bits
-// long.
-const int kHighMulCarryOffset = kBigintChunkBits>> 1; // 3
-const int kLowMulCarryOffset = kHighMulCarryOffset + 1; // 4
-const int kHalfOffset = kLowMulCarryOffset; // 4
-const bigint_chunk kHalfBitMask = (bigint_chunk)1 << kLowMulCarryOffset; // 0b 0001 0000
-const bigint_chunk kLowHalfMask = kHalfBitMask - 1; // 0b 0000 1111
-const bigint_chunk kHighHalfMask = ~kLowHalfMask; // 0b 1111 0000
-const bigint_chunk kHighMulMask = ~(kLowHalfMask >> 1); // 0b 1111 1000
-const bigint_chunk kLowMulMask = kHighHalfMask; // 0b 1111 0000
 
 Bigint* split(const Bigint* n) {
   Bigint* res = (Bigint*)bigint_malloc(sizeof(Bigint));
   *res = *n;
   res->capacity = n->size == 0 ? 1 : n->size << 1;
   res->size = res->capacity;
-  res->chunks = (bigint_chunk*)bigint_calloc(res->capacity, kBigintChunkSize);
+  res->chunks = (chunk*)bigint_calloc(res->capacity, sizeof(chunk));
 
-  bigint_chunk* p = res->chunks;
-  bigint_chunk cur = n->chunks[0];
+  chunk* p = res->chunks;
+  chunk cur = n->chunks[0];
   int need = kHalfOffset,
       remainder = kBigintChunkBits,
       i = 0;
   while (i < n->size) {
     if (remainder >= need) {
-      *p++ |= (cur & ((bigint_chunk)1 << need) - 1) << kHalfOffset - need;
+      *p++ |= (cur & ((chunk)1 << need) - 1) << kHalfOffset - need;
       if (remainder == need) {
         cur = n->chunks[++i];
         remainder = kBigintChunkBits;
@@ -330,14 +323,14 @@ Bigint* split(const Bigint* n) {
 void combine(Bigint* n) {
   int need = kBigintChunkBits,
       remainder = kHalfOffset;
-  bigint_chunk* l = n->chunks;
-  bigint_chunk* r = n->chunks;
-  bigint_chunk* end = n->chunks + n->size;
-  bigint_chunk cur = *r;
+  chunk* l = n->chunks;
+  chunk* r = n->chunks;
+  chunk* end = n->chunks + n->size;
+  chunk cur = *r;
   *r = 0;
   while (r < end) {
     if (remainder >= need) {
-      *l++ |= (cur & ((bigint_chunk)1 << need) - 1) << kBigintChunkBits - need;
+      *l++ |= (cur & ((chunk)1 << need) - 1) << kBigintChunkBits - need;
       if (remainder == need) {
         cur = *++r;
         if (r < end) *r = 0;
@@ -366,9 +359,9 @@ Bigint* bigint_mul_bigint_school(const Bigint* a, const Bigint* b) {
   Bigint* res = (Bigint*)bigint_malloc(sizeof(Bigint));
   res->capacity = len;
   res->sign = a->sign * b->sign;
-  res->chunks = (bigint_chunk*)bigint_calloc(len, kBigintChunkSize);
-  bigint_chunk* buf = (bigint_chunk*)bigint_malloc(len * kBigintChunkSize);
-  bigint_chunk tmp, carry_mul = 0, carry_add = 0;
+  res->chunks = (chunk*)bigint_calloc(len, sizeof(chunk));
+  chunk* buf = (chunk*)bigint_malloc(len * sizeof(chunk));
+  chunk tmp, carry_mul = 0, carry_add = 0;
   for (int i = 0; i < b_len; ++i) {
     int j = 0;
     for (j = 0; j < a_len; ++j) {
