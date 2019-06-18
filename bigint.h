@@ -5,6 +5,8 @@
 extern "C" {
 #endif //__cplusplus
 
+#include <stddef.h>
+
 typedef unsigned long long bigint_chunk;
 const int kBigintChunkSize = sizeof(bigint_chunk);
 const int kBigintByteBits = 8; // number of bits per byte
@@ -15,8 +17,9 @@ const double kBigintLog2 = 0.30102999566398119802;
 
 extern struct Bigint {
   bigint_chunk* chunks;
-  int len;
-  int bits;
+  size_t capacity;
+  size_t size;
+  size_t bits;
   int sign;
 } bigint_default;
 typedef struct Bigint Bigint;

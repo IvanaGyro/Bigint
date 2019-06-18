@@ -7,7 +7,7 @@ extern "C" {
 #include <errno.h>
 #include "bigint.h"
 
-Bigint bigint_default = {NULL, 0, 0, 1};
+Bigint bigint_default = {NULL, 0, 0, 0, 1};
 
 inline void* bigint_malloc(size_t size) {
     void* memory = malloc(size);
@@ -39,14 +39,30 @@ inline void* bigint_realloc(void* memory, size_t new_size) {
 Bigint* bigint_copy(Bigint* num) {
   Bigint* copy = (Bigint*)bigint_malloc(sizeof(Bigint));
   *copy = *num;
-  copy->chunks = (bigint_chunk*)bigint_malloc(copy->len * kBigintChunkSize);
-  memcpy(copy->chunks, num->chunks, copy->len * kBigintChunkSize);
+  copy->chunks = (bigint_chunk*)bigint_malloc(copy->capacity * kBigintChunkSize);
+  memcpy(copy->chunks, num->chunks, copy->capacity * kBigintChunkSize);
   return copy;
 }
 
 void bigint_destroy(Bigint* num) {
   free(num->chunks);
   free(num);
+}
+
+inline void update_size(Bigint* n, size_t chunk_bits) {
+  // update size according to bits
+  n->size = (n->bits + chunk_bits - 1) / chunk_bits;
+}
+
+inline void trim_bits_by_one(Bigint* n, size_t chunk_bits) {
+  // The input bigint's bits should be correct or bigger than the coorect value
+  // just by one.
+  if (n->bits == 0) return;
+  size_t tmp = n->bits + chunk_bits - 1;
+  size_t pos = tmp / chunk_bits - 1;
+  size_t offset = tmp % chunk_bits;
+  bigint_chunk mask = 1;
+  if ((n->chunks[pos] & mask << offset) == 0) --n->bits;
 }
 
 Bigint* atobi(const char* s_in) {
@@ -69,13 +85,14 @@ Bigint* atobi(const char* s_in) {
   if (len == 0) {
     num->chunks = (bigint_chunk*)bigint_malloc(kBigintChunkSize);
     num->chunks[0] = 0;
-    num->len = 1;
+    num->capacity = 1;
+    num->size = 0;
     num->bits = 0;
     return num;
   }
   
-  num->len = (int)(len * kBigintLog2_10 / kBigintChunkBits + 1);
-  num->chunks = (bigint_chunk*)bigint_calloc(num->len, kBigintChunkSize);
+  num->capacity = (int)(len * kBigintLog2_10 / kBigintChunkBits + 1);
+  num->chunks = (bigint_chunk*)bigint_calloc(num->capacity, kBigintChunkSize);
   num->sign = sign;
 
   int tail = len - 1;
@@ -107,6 +124,7 @@ Bigint* atobi(const char* s_in) {
     }
   }
   free(buf);
+  update_size(num, kBigintChunkBits);
   return num;
 }
 
@@ -130,7 +148,7 @@ char* bitoa(const Bigint* num) {
   char tmp;
   bigint_chunk mask, upper_bound = kBigintMask >> 1;
   bigint_chunk multiplier = 1;
-  for (i=num->len-1; i >= 0; --i) {
+  for (i=num->size-1; i >= 0; --i) {
     mask = upper_bound;
     while (mask) {
       multiplier <<= 1;
@@ -232,16 +250,15 @@ void add(char* a, const char* b) {
 void bigint_add_assign(Bigint* a, const Bigint* b) {
   int bits = (a->bits > b->bits ? a->bits : b->bits) + 1;
   int len = (bits + kBigintChunkBits - 1) / kBigintChunkBits;
-  if (a->len < len) {
+  if (a->capacity < len) {
     a->chunks = (bigint_chunk*)bigint_realloc(a->chunks, len * kBigintChunkSize);
-    memset(a->chunks + a->len, 0, (len - a->len) * kBigintChunkSize);
-    a->len = len;
+    memset(a->chunks + a->capacity, 0, (len - a->capacity) * kBigintChunkSize);
+    a->capacity = len;
   }
 
-  int b_used_len = (b->bits + kBigintChunkBits - 1) / kBigintChunkBits;
   bigint_chunk carry = 0;
   int i;
-  for (i = 0; i < b_used_len; ++i) {
+  for (i = 0; i < b->size; ++i) {
     a->chunks[i] += b->chunks[i] + carry;
     carry = (kBigintMask & a->chunks[i]) == kBigintMask;
     a->chunks[i] &= kBigintMask - 1;
@@ -252,13 +269,17 @@ void bigint_add_assign(Bigint* a, const Bigint* b) {
     a->chunks[i] &= kBigintMask - 1;
     ++i;
   }
-  if (i) { // a and b are not both 0
-    int pos = (bits - 1) / kBigintChunkBits;
-    int off = (bits - 1) % kBigintChunkBits;
-    bigint_chunk mask = 1;
-    if (a->chunks[i-1] & mask << off) a->bits = bits;
-    else a->bits = bits-1;
-  }
+  a->bits = bits;
+  trim_bits_by_one(a, kBigintChunkBits);
+  update_size(a, kBigintChunkBits);
+  // if (i) { // a and b are not both 0
+  //   int pos = (bits - 1) / kBigintChunkBits;
+  //   int off = (bits - 1) % kBigintChunkBits;
+  //   bigint_chunk mask = 1;
+  //   if (a->chunks[i-1] & mask << off) a->bits = bits;
+  //   else a->bits = bits-1;
+    
+  // }
 }
 
 // The comments show the value of each constant when `bigint_chunk` is 8-bits
@@ -272,23 +293,19 @@ const bigint_chunk kHighHalfMask = ~kLowHalfMask; // 0b 1111 0000
 const bigint_chunk kHighMulMask = ~(kLowHalfMask >> 1); // 0b 1111 1000
 const bigint_chunk kLowMulMask = kHighHalfMask; // 0b 1111 0000
 
-size_t used_len(const Bigint* n) {
-  return (n->bits + kBigintChunkBits - 1) / kBigintChunkBits;
-}
-
 Bigint* split(const Bigint* n) {
   Bigint* res = (Bigint*)bigint_malloc(sizeof(Bigint));
   *res = *n;
-  int n_used_len = used_len(n);
-  res->len = n_used_len == 0 ? 1 : n_used_len << 1;
-  res->chunks = (bigint_chunk*)bigint_calloc(res->len, kBigintChunkSize);
+  res->capacity = n->size == 0 ? 1 : n->size << 1;
+  res->size = res->capacity;
+  res->chunks = (bigint_chunk*)bigint_calloc(res->capacity, kBigintChunkSize);
 
   bigint_chunk* p = res->chunks;
   bigint_chunk cur = n->chunks[0];
   int need = kHalfOffset,
       remainder = kBigintChunkBits,
       i = 0;
-  while (i < n_used_len) {
+  while (i < n->size) {
     if (remainder >= need) {
       *p++ |= (cur & ((bigint_chunk)1 << need) - 1) << kHalfOffset - need;
       if (remainder == need) {
@@ -306,7 +323,7 @@ Bigint* split(const Bigint* n) {
       remainder = kBigintChunkBits;
     }
   }
-  if (res->chunks[res->len - 1] == 0 && res->len > 1) --res->len;
+  if (res->chunks[res->size - 1] == 0 && res->size > 0) --res->size;
   return res;
 }
 
@@ -315,7 +332,7 @@ void combine(Bigint* n) {
       remainder = kHalfOffset;
   bigint_chunk* l = n->chunks;
   bigint_chunk* r = n->chunks;
-  bigint_chunk* end = n->chunks + n->len;
+  bigint_chunk* end = n->chunks + n->size;
   bigint_chunk cur = *r;
   *r = 0;
   while (r < end) {
@@ -338,24 +355,16 @@ void combine(Bigint* n) {
       remainder = kHalfOffset;
     }
   }
-  int len = n->len;
-  while (n->chunks[len-1] == 0 && len > 1) --len;
-  n->bits = len * kBigintChunkBits;
-  bigint_chunk mask = (bigint_chunk)1 << kBigintChunkBits - 1;
-  bigint_chunk last = n->chunks[len-1];
-  while (mask && (mask & last) == 0) {
-    mask >>= 1;
-    --n->bits;
-  }
+  update_size(n, kBigintChunkBits);
 }
 
 Bigint* bigint_mul_bigint_school(const Bigint* a, const Bigint* b) {
   Bigint* a_split = split(a);
   Bigint* b_split = split(b);
-  int a_len = a_split->len, b_len = b_split->len;
+  int a_len = a_split->size, b_len = b_split->size;
   int len = a_len + b_len;
   Bigint* res = (Bigint*)bigint_malloc(sizeof(Bigint));
-  res->len = len;
+  res->capacity = len;
   res->sign = a->sign * b->sign;
   res->chunks = (bigint_chunk*)bigint_calloc(len, kBigintChunkSize);
   bigint_chunk* buf = (bigint_chunk*)bigint_malloc(len * kBigintChunkSize);
@@ -377,6 +386,10 @@ Bigint* bigint_mul_bigint_school(const Bigint* a, const Bigint* b) {
     }
     carry_add = carry_mul = 0;
   }
+  if (res->chunks[res->capacity-1] == 0) res->size = res->capacity-1;
+  else res->size = res->capacity;
+  res->bits = a->bits + b->bits;
+  trim_bits_by_one(res, kHalfOffset);
   combine(res);
   return res;
 }

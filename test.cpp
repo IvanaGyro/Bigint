@@ -20,8 +20,9 @@ TEST(atobi, HandleZeros) {
   };
   for (const char* s : cases) {
     n = atobi(s);
+    EXPECT_EQ(n->size, 0);
+    EXPECT_GE(n->capacity, n->size);
     EXPECT_EQ(n->chunks[0], 0);
-    EXPECT_EQ(n->len, 1);
     EXPECT_EQ(n->bits, 0);
     EXPECT_EQ(n->sign, 1);
     delete n->chunks;
@@ -33,17 +34,20 @@ TEST(atobi, Boundary) {
   Bigint* n;
   
   n = atobi("1");
+  EXPECT_EQ(n->size, 1);
+  EXPECT_GE(n->capacity, n->size);
   EXPECT_EQ(n->chunks[0], 1);
-  EXPECT_EQ(n->len, 1);
   EXPECT_EQ(n->bits, 1);
+  EXPECT_EQ(n->sign, 1);
   delete n->chunks;
   delete n;
 
   n = atobi("3");
+  EXPECT_EQ(n->size, 1);
+  EXPECT_GE(n->capacity, n->size);
   EXPECT_EQ(n->chunks[0], 3);
-  EXPECT_EQ(n->len, 1);
   EXPECT_EQ(n->bits, 2);
-  delete n->chunks;
+  EXPECT_EQ(n->sign, 1);
   delete n;
 
   unsigned long long num = (~0ULL) >> 1; // num = 0b0111...111
@@ -54,20 +58,23 @@ TEST(atobi, Boundary) {
 
   snprintf(s, cnt+1, "%llu", num);
   n = atobi(s);
-  EXPECT_GE(n->len, 1);
+  EXPECT_EQ(n->size, 1);
+  EXPECT_GE(n->capacity, n->size);
   EXPECT_EQ(n->chunks[0], num);
   EXPECT_EQ(n->bits, sizeof(unsigned long long)*8-1);
+  EXPECT_EQ(n->sign, 1);
   delete n->chunks;
   delete n;
 
   ++num; // num = 0b1000...000
-
   snprintf(s, cnt+1, "%llu", num);
   n = atobi(s);
-  EXPECT_GE(n->len, 2);
+  EXPECT_EQ(n->size, 2);
+  EXPECT_GE(n->capacity, n->size);
   EXPECT_EQ(n->chunks[0], 0);
   EXPECT_EQ(n->chunks[1], 1);
   EXPECT_EQ(n->bits, sizeof(unsigned long long)*8);
+  EXPECT_EQ(n->sign, 1);
   delete n->chunks;
   delete n;
 
@@ -84,7 +91,8 @@ TEST(atobi, UnaryPrefices) {
 
   snprintf(s, cnt, "+%llu", num);
   n = atobi(s);
-  EXPECT_GE(n->len, 2);
+  EXPECT_EQ(n->size, 2);
+  EXPECT_GE(n->capacity, n->size);
   EXPECT_EQ(n->chunks[0], 0);
   EXPECT_EQ(n->chunks[1], 1);
   EXPECT_EQ(n->bits, sizeof(unsigned long long)*8);
@@ -93,7 +101,8 @@ TEST(atobi, UnaryPrefices) {
 
   snprintf(s, cnt, "+%llu", num);
   n = atobi(s);
-  EXPECT_GE(n->len, 2);
+  EXPECT_EQ(n->size, 2);
+  EXPECT_GE(n->capacity, n->size);
   EXPECT_EQ(n->chunks[0], 0);
   EXPECT_EQ(n->chunks[1], 1);
   EXPECT_EQ(n->bits, sizeof(unsigned long long)*8);
@@ -102,7 +111,8 @@ TEST(atobi, UnaryPrefices) {
 
   snprintf(s, cnt, "-%llu", num);
   n = atobi(s);
-  EXPECT_GE(n->len, 2);
+  EXPECT_EQ(n->size, 2);
+  EXPECT_GE(n->capacity, n->size);
   EXPECT_EQ(n->chunks[0], 0);
   EXPECT_EQ(n->chunks[1], 1);
   EXPECT_EQ(n->bits, sizeof(unsigned long long)*8);
@@ -111,7 +121,8 @@ TEST(atobi, UnaryPrefices) {
 
   snprintf(s, cnt, "++%llu", num);
   n = atobi(s);
-  EXPECT_GE(n->len, 2);
+  EXPECT_EQ(n->size, 2);
+  EXPECT_GE(n->capacity, n->size);
   EXPECT_EQ(n->chunks[0], 0);
   EXPECT_EQ(n->chunks[1], 1);
   EXPECT_EQ(n->bits, sizeof(unsigned long long)*8);
@@ -120,7 +131,8 @@ TEST(atobi, UnaryPrefices) {
 
   snprintf(s, cnt, "--%llu", num);
   n = atobi(s);
-  EXPECT_GE(n->len, 2);
+  EXPECT_EQ(n->size, 2);
+  EXPECT_GE(n->capacity, n->size);
   EXPECT_EQ(n->chunks[0], 0);
   EXPECT_EQ(n->chunks[1], 1);
   EXPECT_EQ(n->bits, sizeof(unsigned long long)*8);
@@ -129,7 +141,8 @@ TEST(atobi, UnaryPrefices) {
 
   snprintf(s, cnt, "+-+%llu", num);
   n = atobi(s);
-  EXPECT_GE(n->len, 2);
+  EXPECT_EQ(n->size, 2);
+  EXPECT_GE(n->capacity, n->size);
   EXPECT_EQ(n->chunks[0], 0);
   EXPECT_EQ(n->chunks[1], 1);
   EXPECT_EQ(n->bits, sizeof(unsigned long long)*8);
@@ -138,7 +151,8 @@ TEST(atobi, UnaryPrefices) {
 
   snprintf(s, cnt, "-+-%llu", num);
   n = atobi(s);
-  EXPECT_GE(n->len, 2);
+  EXPECT_EQ(n->size, 2);
+  EXPECT_GE(n->capacity, n->size);
   EXPECT_EQ(n->chunks[0], 0);
   EXPECT_EQ(n->chunks[1], 1);
   EXPECT_EQ(n->bits, sizeof(unsigned long long)*8);
@@ -256,7 +270,8 @@ TEST(add_eq, Positive) {
 TEST(split, Zero) {
   Bigint* a = atobi("0");
   Bigint* res = split(a);
-  EXPECT_EQ(res->len, 1);
+  EXPECT_EQ(res->size, 0);
+  EXPECT_GE(res->capacity, res->size);
   EXPECT_EQ(res->chunks[0], 0);
   bigint_destroy(a);
   bigint_destroy(res);
@@ -265,7 +280,8 @@ TEST(split, Zero) {
 TEST(split, One) {
   Bigint* a = atobi("1");
   Bigint* res = split(a);
-  EXPECT_EQ(res->len, 1);
+  EXPECT_EQ(res->size, 1);
+  EXPECT_GE(res->capacity, res->size);
   EXPECT_EQ(res->chunks[0], 1);
   bigint_destroy(a);
   bigint_destroy(res);
@@ -281,7 +297,7 @@ TEST(split, Big) {
   };
 
   Bigint* res = split(a);
-  EXPECT_EQ(res->len, 7);
+  EXPECT_EQ(res->size, 7);
   for (int i = 0; i < 7; ++i) {
     EXPECT_EQ(res->chunks[i], ans[7-1-i]);
   }
@@ -293,7 +309,8 @@ TEST(commbine, Zero) {
   Bigint* a = atobi("0");
   Bigint* a_split = split(a);
   combine(a_split);
-  EXPECT_GE(a_split->len, 1);
+  EXPECT_EQ(a_split->size, 0);
+  EXPECT_GE(a_split->capacity, a_split->size);
   EXPECT_EQ(a_split->bits, 0);
   EXPECT_EQ(a_split->sign, 1);
   EXPECT_EQ(a_split->chunks[0], 0);
@@ -305,7 +322,8 @@ TEST(commbine, MinusOne) {
   Bigint* a = atobi("-1");
   Bigint* a_split = split(a);
   combine(a_split);
-  EXPECT_GE(a_split->len, 1);
+  EXPECT_EQ(a_split->size, 1);
+  EXPECT_GE(a_split->capacity, a_split->size);
   EXPECT_EQ(a_split->bits, 1);
   EXPECT_EQ(a_split->sign, -1);
   EXPECT_EQ(a_split->chunks[0], 1);
@@ -317,10 +335,11 @@ TEST(commbine, Big) {
   Bigint* a = atobi("171086437689357109634083209420451835789012398474646140128370398");
   Bigint* a_split = split(a);
   combine(a_split);
-  EXPECT_GE(a_split->len, a->len);
+  EXPECT_EQ(a_split->size, a->size);
+  EXPECT_GE(a_split->capacity, a->capacity);
   EXPECT_EQ(a_split->bits, a->bits);
   EXPECT_EQ(a_split->sign, a->sign);
-  for (int i = 0; i < a->len; ++i) {
+  for (int i = 0; i < a->capacity; ++i) {
     EXPECT_EQ(a_split->chunks[i], a->chunks[i]);
   }
   bigint_destroy(a);
@@ -370,11 +389,11 @@ TEST(bigint_mul_bigint_school, One) {
   Bigint* res;
   char* s;
 
-  a = atobi("0");
-  b = atobi("0");
+  a = atobi("1");
+  b = atobi("1");
   res = bigint_mul_bigint_school(a, b);
   s = bitoa(res);
-  EXPECT_STREQ(s, "0");
+  EXPECT_STREQ(s, "1");
   bigint_destroy(a);
   bigint_destroy(b);
   bigint_destroy(res);
@@ -425,6 +444,25 @@ TEST(bigint_mul_bigint_school, One) {
   res = bigint_mul_bigint_school(a, b);
   s = bitoa(res);
   EXPECT_STREQ(s, "698279837967019823756324324");
+  bigint_destroy(a);
+  bigint_destroy(b);
+  bigint_destroy(res);
+  delete s;
+}
+
+TEST(bigint_mul_bigint_school, Bounary) {
+  char buf[100];
+  bigint_chunk na = ((bigint_chunk)1 << (sizeof(bigint_chunk) << 1)) + 1;
+  bigint_chunk nb = (na >> 1) + 1;
+  
+  _i64toa(na, buf, 10);
+  Bigint* a = atobi(buf);
+  _i64toa(nb, buf, 10);
+  Bigint* b = atobi(buf);
+  Bigint* res = bigint_mul_bigint_school(a, b);
+  char* s = bitoa(res);
+  _i64toa(na * nb, buf, 10);
+  EXPECT_STREQ(s, buf);
   bigint_destroy(a);
   bigint_destroy(b);
   bigint_destroy(res);
