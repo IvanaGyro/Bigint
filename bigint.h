@@ -19,7 +19,9 @@ typedef struct Bigint {
   int sign;
 } Bigint;
 
+Bigint* bigint_new(size_t capacity);
 Bigint* bigint_copy(Bigint* num);
+void bigint_reserve(Bigint* num, size_t new_capacity);
 void bigint_destroy(Bigint* num);
 Bigint* atobi(const char* s_in);
 char* bitoa(const Bigint* num);

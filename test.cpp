@@ -22,7 +22,6 @@ TEST(atobi, HandleZeros) {
     n = atobi(s);
     EXPECT_EQ(n->size, 0);
     EXPECT_GE(n->capacity, n->size);
-    EXPECT_EQ(n->chunks[0], 0);
     EXPECT_EQ(n->bits, 0);
     EXPECT_EQ(n->sign, 1);
     delete n->chunks;
@@ -272,7 +271,7 @@ TEST(split, Zero) {
   Bigint* res = split(a);
   EXPECT_EQ(res->size, 0);
   EXPECT_GE(res->capacity, res->size);
-  EXPECT_EQ(res->chunks[0], 0);
+  EXPECT_EQ(res->bits, 0);
   bigint_destroy(a);
   bigint_destroy(res);
 }
@@ -283,6 +282,7 @@ TEST(split, One) {
   EXPECT_EQ(res->size, 1);
   EXPECT_GE(res->capacity, res->size);
   EXPECT_EQ(res->chunks[0], 1);
+  EXPECT_EQ(res->bits, 1);
   bigint_destroy(a);
   bigint_destroy(res);
 }
@@ -313,7 +313,6 @@ TEST(commbine, Zero) {
   EXPECT_GE(a_split->capacity, a_split->size);
   EXPECT_EQ(a_split->bits, 0);
   EXPECT_EQ(a_split->sign, 1);
-  EXPECT_EQ(a_split->chunks[0], 0);
   bigint_destroy(a);
   bigint_destroy(a_split);
 }

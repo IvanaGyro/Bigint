@@ -48,12 +48,34 @@ inline void* bigint_realloc(void* memory, size_t new_size) {
     return memory;
 }
 
+Bigint* bigint_new(size_t capacity) {
+  Bigint* num = (Bigint*)bigint_calloc(1, sizeof(Bigint));
+  bigint_reserve(num, capacity);
+  num->sign = 1;
+  return num;
+}
+
 Bigint* bigint_copy(Bigint* num) {
   Bigint* copy = (Bigint*)bigint_malloc(sizeof(Bigint));
   *copy = *num;
   copy->chunks = (chunk*)bigint_malloc(copy->capacity * sizeof(chunk));
   memcpy(copy->chunks, num->chunks, copy->capacity * sizeof(chunk));
   return copy;
+}
+
+void bigint_reserve(Bigint* num, size_t new_capacity) {
+  size_t capacity = num->capacity;
+  if (capacity < new_capacity) {
+    if (capacity == 0) {
+      num->chunks = (chunk*)bigint_calloc(new_capacity, sizeof(chunk));
+    } else {
+      num->chunks = (chunk*)bigint_realloc(num->chunks, 
+                                           new_capacity * sizeof(chunk));
+      memset(num->chunks + capacity,
+             0, (new_capacity - capacity) * sizeof(chunk));
+    }
+    num->capacity = new_capacity;
+  }
 }
 
 void bigint_destroy(Bigint* num) {
@@ -92,19 +114,9 @@ Bigint* atobi(const char* s_in) {
     ++s;
     --len;
   }
-  Bigint* num = (Bigint*)bigint_malloc(sizeof(Bigint));
-  *num = bigint_default;
-  if (len == 0) {
-    num->chunks = (chunk*)bigint_malloc(sizeof(chunk));
-    num->chunks[0] = 0;
-    num->capacity = 1;
-    num->size = 0;
-    num->bits = 0;
-    return num;
-  }
-  
-  num->capacity = (int)(len * kLog2_10 / kBigintChunkBits + 1);
-  num->chunks = (chunk*)bigint_calloc(num->capacity, sizeof(chunk));
+
+  if (len == 0) return bigint_new(0);
+  Bigint* num = bigint_new(len * kLog2_10 / kBigintChunkBits + 1);
   num->sign = sign;
 
   int tail = len - 1;
@@ -211,6 +223,7 @@ char* bitoa(const Bigint* num) {
   char* s = res;
   if (num->sign == -1) *s++ = '-'; 
   *s = '0';
+  if (num->size == 0) return res;
   char* buf = (char*)bigint_malloc(kBigintChunkBits * kLog2 + 2);
   
   int i;
@@ -262,11 +275,7 @@ char* bitoa(const Bigint* num) {
 void bigint_add_assign(Bigint* a, const Bigint* b) {
   int bits = (a->bits > b->bits ? a->bits : b->bits) + 1;
   int len = (bits + kBigintChunkBits - 1) / kBigintChunkBits;
-  if (a->capacity < len) {
-    a->chunks = (chunk*)bigint_realloc(a->chunks, len * sizeof(chunk));
-    memset(a->chunks + a->capacity, 0, (len - a->capacity) * sizeof(chunk));
-    a->capacity = len;
-  }
+  bigint_reserve(a, len);
 
   chunk carry = 0;
   int i;
@@ -287,11 +296,11 @@ void bigint_add_assign(Bigint* a, const Bigint* b) {
 }
 
 Bigint* split(const Bigint* n) {
-  Bigint* res = (Bigint*)bigint_malloc(sizeof(Bigint));
-  *res = *n;
-  res->capacity = n->size == 0 ? 1 : n->size << 1;
+  Bigint* res = bigint_new(n->size << 1);
+  if (n->size == 0) return res;
+  res->sign = n->sign;
+  res->bits = n->bits;
   res->size = res->capacity;
-  res->chunks = (chunk*)bigint_calloc(res->capacity, sizeof(chunk));
 
   chunk* p = res->chunks;
   chunk cur = n->chunks[0];
@@ -316,11 +325,12 @@ Bigint* split(const Bigint* n) {
       remainder = kBigintChunkBits;
     }
   }
-  if (res->chunks[res->size - 1] == 0 && res->size > 0) --res->size;
+  if (res->chunks[res->size - 1] == 0) --res->size;
   return res;
 }
 
 void combine(Bigint* n) {
+  if (n->size == 0) return;
   int need = kBigintChunkBits,
       remainder = kHalfOffset;
   chunk* l = n->chunks;
@@ -356,10 +366,8 @@ Bigint* bigint_mul_bigint_school(const Bigint* a, const Bigint* b) {
   Bigint* b_split = split(b);
   int a_len = a_split->size, b_len = b_split->size;
   int len = a_len + b_len;
-  Bigint* res = (Bigint*)bigint_malloc(sizeof(Bigint));
-  res->capacity = len;
+  Bigint* res = bigint_new(len);
   res->sign = a->sign * b->sign;
-  res->chunks = (chunk*)bigint_calloc(len, sizeof(chunk));
   chunk* buf = (chunk*)bigint_malloc(len * sizeof(chunk));
   chunk tmp, carry_mul = 0, carry_add = 0;
   for (int i = 0; i < b_len; ++i) {
@@ -379,7 +387,7 @@ Bigint* bigint_mul_bigint_school(const Bigint* a, const Bigint* b) {
     }
     carry_add = carry_mul = 0;
   }
-  if (res->chunks[res->capacity-1] == 0) res->size = res->capacity-1;
+  if (res->capacity && res->chunks[res->capacity-1] == 0) res->size = res->capacity-1;
   else res->size = res->capacity;
   res->bits = a->bits + b->bits;
   trim_bits_by_one(res, kHalfOffset);
